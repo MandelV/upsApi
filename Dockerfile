@@ -1,28 +1,30 @@
-FROM golang:1.25-alpine AS base
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
-
-RUN apk update 
-RUN apk add --no-cache git ca-certificates
+RUN apk update && apk add --no-cache git ca-certificates
 
 WORKDIR /upsm
-ADD . /upsm/
 
-
+# D'abord les deps pour profiter du cache
 COPY go.mod go.sum ./
-
-# BUILD
 RUN go mod download
-RUN go env -w CGO_ENABLED=0 && go build -o /go/bin/upsmapi .
 
-# On copie les certificats dans un layer séparé
-FROM scratch AS app
-EXPOSE 9695
+# Puis le reste du code
+COPY . .
+
+RUN CGO_ENABLED=0 go build -o /upsm/upsmapi .
+
+########################
+# Image finale
+########################
+FROM alpine:3.20 AS app
+
+
+RUN apk add --no-cache ca-certificates nut
+
 WORKDIR /upsm
+EXPOSE 9695
 
 # Copier le binaire
-COPY --from=base /go/bin/upsmapi /upsm/upsmapi
-
-# Copier les certificats SSL
-COPY --from=base /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /upsm/upsmapi /upsm/upsmapi
 
 ENTRYPOINT ["/upsm/upsmapi"]

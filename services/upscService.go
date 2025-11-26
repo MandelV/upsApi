@@ -3,6 +3,7 @@ package services
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -29,7 +30,7 @@ func NewUpscService(user string, host string) IUpscService {
 // Read
 func (u *upscService) Read() (*models.UPSStatus, error) {
 	app := "upsc"
-	arg0 := "eaton@localhost"
+	arg0 := fmt.Sprintf("%s@%s", u.user, u.host)
 	cmd := exec.Command(app, arg0)
 	stdout, err := cmd.Output()
 

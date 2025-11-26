@@ -52,14 +52,14 @@ func ParseUPSOuput(b []byte) (*models.UPSStatus, error) {
 			continue
 		}
 
-		parts := strings.Split(line, ":")
-
+		// On coupe uniquement sur le premier ":", pour gérer les valeurs qui en contiennent
+		parts := strings.SplitN(line, ":", 2)
 		if len(parts) != 2 {
 			continue
 		}
 
-		key := parts[0]
-		val := parts[1]
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
 
 		switch key {
 		// --- battery ---
@@ -178,10 +178,11 @@ func ParseUPSOuput(b []byte) (*models.UPSStatus, error) {
 		}
 	}
 
-	return status, nil
-
+	return status, scanner.Err()
 }
+
 func atoi(s string) int {
+	s = strings.TrimSpace(s)
 	i, err := strconv.Atoi(s)
 	if err != nil {
 		return -1
@@ -190,6 +191,7 @@ func atoi(s string) int {
 }
 
 func atof(s string) float64 {
+	s = strings.TrimSpace(s)
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return -1.0

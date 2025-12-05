@@ -1,8 +1,10 @@
 package app
 
 import (
+	"context"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/MandelV/raspberry-terraforming/upsmonitoring/models"
 	"github.com/MandelV/raspberry-terraforming/upsmonitoring/services"
@@ -15,20 +17,55 @@ type UpsMonitorAPI struct {
 	vroom       *gin.Engine
 	api         *gin.RouterGroup
 	listener    net.Listener
+	ctx         context.Context
+	cancel      context.CancelFunc
 	upscService services.IUpscService
 }
 
 func NewUpsMonitorAPI(engine *gin.Engine, listener net.Listener, upscService services.IUpscService) *UpsMonitorAPI {
 
+	ctx, cancel := context.WithCancel(context.Background())
 	obj := &UpsMonitorAPI{
 		vroom:       engine,
 		listener:    listener,
 		upscService: upscService,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 
 	obj.api = obj.vroom.Group("/api")
 	obj.BuildRoute()
+	go obj.refreshMetrics(10 * time.Second)
 	return obj
+}
+
+func (s *UpsMonitorAPI) Close() error {
+	s.cancel()
+	return nil
+}
+
+// refreshMetrics refresh prometheus metrics each d
+func (s *UpsMonitorAPI) refreshMetrics(d time.Duration) {
+
+	ticker := time.NewTicker(d)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+
+		case <-ticker.C:
+			if status, err := s.upscService.Read(); err == nil {
+
+				UpdateMetrics(status)
+
+			} else {
+				log.Err(err).Str("ctx", "refreshMetrics").Msg("unable to read ups's metrics")
+			}
+
+		}
+	}
+
 }
 
 func (s *UpsMonitorAPI) BuildRoute() {

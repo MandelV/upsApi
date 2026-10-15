@@ -13,6 +13,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// UpsMonitorAPI est le serveur HTTP principal. Il encapsule le routeur Gin,
+// un listener TCP, et le service upsc pour interroger l'UPS.
+// Un contexte interne permet d'arrêter proprement la goroutine de rafraîchissement des métriques.
 type UpsMonitorAPI struct {
 	vroom       *gin.Engine
 	api         *gin.RouterGroup
@@ -22,6 +25,8 @@ type UpsMonitorAPI struct {
 	upscService services.IUpscService
 }
 
+// NewUpsMonitorAPI crée le serveur, enregistre les routes et lance une goroutine
+// qui rafraîchit les métriques Prometheus toutes les 10 secondes en appelant upsc.
 func NewUpsMonitorAPI(engine *gin.Engine, listener net.Listener, upscService services.IUpscService) *UpsMonitorAPI {
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -39,12 +44,14 @@ func NewUpsMonitorAPI(engine *gin.Engine, listener net.Listener, upscService ser
 	return obj
 }
 
+// Close annule le contexte interne, ce qui stoppe la goroutine de rafraîchissement des métriques.
 func (s *UpsMonitorAPI) Close() error {
 	s.cancel()
 	return nil
 }
 
-// refreshMetrics refresh prometheus metrics each d
+// refreshMetrics interroge upsc à intervalle régulier (d) et met à jour les gauges Prometheus.
+// S'arrête quand le contexte est annulé via Close().
 func (s *UpsMonitorAPI) refreshMetrics(d time.Duration) {
 
 	ticker := time.NewTicker(d)
@@ -68,9 +75,12 @@ func (s *UpsMonitorAPI) refreshMetrics(d time.Duration) {
 
 }
 
+// BuildRoute enregistre toutes les routes du serveur :
+//   - GET /api/read       -> status JSON de l'UPS
+//   - GET /metrics        -> métriques Prometheus (via promhttp)
+//   - GET /health/liveness  -> probe de liveness (toujours 200)
+//   - GET /health/readiness -> probe de readiness (toujours 200)
 func (s *UpsMonitorAPI) BuildRoute() {
-	//s.vroom.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
 	s.api.GET("/read", s.endpoint_get_upsc_status)
 	s.vroom.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	health := s.vroom.Group("/health")
@@ -78,10 +88,13 @@ func (s *UpsMonitorAPI) BuildRoute() {
 	health.GET("/readiness", s.endpoint_readiness)
 }
 
+// ListenAndServe démarre le serveur HTTP sur le listener TCP fourni à la construction.
 func (s *UpsMonitorAPI) ListenAndServe() error {
 	return s.vroom.RunListener(s.listener)
 }
 
+// endpoint_get_upsc_status exécute `upsc` à la demande et retourne le status complet en JSON.
+// Désactive le cache navigateur pour toujours renvoyer des données fraîches.
 func (s *UpsMonitorAPI) endpoint_get_upsc_status(ctx *gin.Context) {
 
 	ctx.Header("Cache-Control", "no-store")

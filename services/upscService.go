@@ -11,15 +11,19 @@ import (
 	"github.com/MandelV/raspberry-terraforming/upsmonitoring/models"
 )
 
+// IUpscService définit l'interface pour lire le status d'un UPS.
+// Permet de mocker le service dans les tests.
 type IUpscService interface {
 	Read() (*models.UPSStatus, error)
 }
 
+// upscService implémente IUpscService en exécutant la commande `upsc` du package NUT.
 type upscService struct {
-	user string
-	host string
+	user string // Nom de l'UPS dans NUT (ex: "eaton")
+	host string // Hôte du serveur NUT (ex: "localhost")
 }
 
+// NewUpscService crée un service qui interrogera l'UPS `user` sur le serveur NUT `host`.
 func NewUpscService(user string, host string) IUpscService {
 	return &upscService{
 		user: user,
@@ -27,7 +31,8 @@ func NewUpscService(user string, host string) IUpscService {
 	}
 }
 
-// Read
+// Read exécute la commande `upsc <user>@<host>` et parse la sortie texte
+// (format "clé: valeur" ligne par ligne) en une struct UPSStatus.
 func (u *upscService) Read() (*models.UPSStatus, error) {
 	app := "upsc"
 	arg0 := fmt.Sprintf("%s@%s", u.user, u.host)
@@ -38,10 +43,13 @@ func (u *upscService) Read() (*models.UPSStatus, error) {
 		return nil, err
 	}
 
-	//Parse & output
 	return ParseUPSOuput(stdout)
 }
 
+// ParseUPSOuput parse la sortie brute de `upsc` (format "clé: valeur\n") en UPSStatus.
+// Chaque ligne est splitée sur le premier ":" uniquement, car certaines valeurs contiennent ":".
+// Les valeurs numériques sont converties via atoi/atof, les booléens via parseBool01/parseBoolYesNo.
+// Les clés non reconnues sont silencieusement ignorées.
 func ParseUPSOuput(b []byte) (*models.UPSStatus, error) {
 	status := &models.UPSStatus{}
 	scanner := bufio.NewScanner(bytes.NewReader(b))
@@ -52,7 +60,6 @@ func ParseUPSOuput(b []byte) (*models.UPSStatus, error) {
 			continue
 		}
 
-		// On coupe uniquement sur le premier ":", pour gérer les valeurs qui en contiennent
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) != 2 {
 			continue
@@ -181,6 +188,7 @@ func ParseUPSOuput(b []byte) (*models.UPSStatus, error) {
 	return status, scanner.Err()
 }
 
+// atoi convertit une string en int. Retourne -1 si la conversion échoue.
 func atoi(s string) int {
 	s = strings.TrimSpace(s)
 	i, err := strconv.Atoi(s)
@@ -190,6 +198,7 @@ func atoi(s string) int {
 	return i
 }
 
+// atof convertit une string en float64. Retourne -1.0 si la conversion échoue.
 func atof(s string) float64 {
 	s = strings.TrimSpace(s)
 	f, err := strconv.ParseFloat(s, 64)
@@ -199,13 +208,14 @@ func atof(s string) float64 {
 	return f
 }
 
-// "yes"/"no" -> bool
+// parseBoolYesNo convertit "yes", "enabled" ou "on" en true, tout le reste en false.
 func parseBoolYesNo(s string) bool {
 	s = strings.ToLower(strings.TrimSpace(s))
 	return s == "yes" || s == "enabled" || s == "on"
 }
 
-// "0"/"1" -> bool (driver.flag.allow_killpower)
+// parseBool01 convertit "1", "true" ou "yes" en true, tout le reste en false.
+// Utilisé pour les flags binaires comme driver.flag.allow_killpower.
 func parseBool01(s string) bool {
 	s = strings.TrimSpace(s)
 	return s == "1" || s == "true" || s == "yes"

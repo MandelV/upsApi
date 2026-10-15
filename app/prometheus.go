@@ -6,8 +6,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// Gauges Prometheus enregistrées automatiquement via promauto.
+// Toutes préfixées "upsapi_" pour éviter les collisions avec d'autres exporters.
+// Ces gauges sont mises à jour périodiquement par refreshMetrics() dans upsMonitorApi.go.
 var (
-	// Battery metrics
 	batteryCharge = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "upsapi_battery_charge",
 		Help: "Battery charge percentage",
@@ -101,7 +103,9 @@ var (
 	})
 )
 
-// UpdateMetrics updates all Prometheus metrics from UPS status
+// UpdateMetrics met à jour toutes les gauges Prometheus à partir d'un UPSStatus.
+// Les valeurs string (status, beeper, outlet) sont converties en 0/1 pour les gauges.
+// Les infos textuelles (fabricant, modèle, etc.) sont exposées via des labels sur upsapi_ups_info.
 func UpdateMetrics(status *models.UPSStatus) {
 	// Battery metrics
 	batteryCharge.Set(float64(status.BatteryCharge))

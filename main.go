@@ -12,6 +12,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// main initialise la configuration depuis les variables d'environnement,
+// crée un listener TCP sur le port configuré, puis démarre le serveur HTTP
+// qui expose l'API REST et les métriques Prometheus.
 func main() {
 	config := models.NewConfiguration()
 	log.Logger = log.Level(zerolog.Level(config.LOG_LEVEL))

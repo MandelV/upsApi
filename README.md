@@ -142,8 +142,58 @@ docker run -d \
 
 The Docker image includes `nut` (via `apk`). Two setups are possible:
 
-- **NUT inside the container:** mount the USB device (`--device`) and configure `/etc/nut/` inside the container (ups.conf, upsd.conf, upsd.users, upsdrv).
-- **NUT on the host:** point `UPS_HOST` to the host IP (or use `--network host`). The container only needs the `upsc` client, no USB passthrough required.
+#### NUT inside the container
+
+Mount the USB device (`--device`) and configure `/etc/nut/` inside the container (ups.conf, upsd.conf, upsd.users, upsdrv). Use `UPS_HOST=localhost`.
+
+#### NUT on the host (recommended)
+
+The container only needs the `upsc` client, no USB passthrough required. Two ways to reach the host's `upsd`:
+
+**Option A: `network_mode: host` (simplest)**
+
+The container shares the host network stack, so `UPS_HOST=localhost` works directly:
+
+```yaml
+services:
+  upsapi:
+    image: ghcr.io/mandelv/upsapi:latest
+    network_mode: host
+    devices:
+      - "/dev/ups0"
+    environment:
+      UPS_USER: eaton
+      UPS_HOST: localhost
+      ENV: production
+      LOG_LEVEL: "1"
+    restart: unless-stopped
+```
+
+**Option B: Docker bridge network**
+
+Point `UPS_HOST` to the host's IP on the Docker bridge (default `172.17.0.1`):
+
+```yaml
+environment:
+  UPS_HOST: 172.17.0.1
+```
+
+You can find the actual IP with `ip addr show docker0`.
+
+For this to work, `upsd` on the host must listen on that interface. Edit `/etc/nut/upsd.conf`:
+
+```
+LISTEN 127.0.0.1 3493
+LISTEN 172.17.0.1 3493
+```
+
+Then restart the NUT server:
+
+```bash
+sudo systemctl restart nut-server
+```
+
+> **Note:** `host.docker.internal` does not work natively on Linux (it is a Docker Desktop feature for macOS/Windows).
 
 ### Docker Compose
 
@@ -154,7 +204,7 @@ services:
     ports:
       - "9695:9695"
     devices:
-      - "/dev/bus/usb/001/004:/dev/bus/usb/001/004"
+      - "/dev/ups0"
     environment:
       UPS_USER: eaton
       UPS_HOST: localhost
